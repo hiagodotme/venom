@@ -55,21 +55,15 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 import { Page } from 'puppeteer';
 import { ControlsLayer } from './layers/controls.layer';
 import { Message } from './model';
-import treekill = require('tree-kill');
 import { magix, timeout, makeOptions } from './helpers/decrypt';
-import axios from 'axios';
 import { useragentOverride } from '../config/WAuserAgente';
-
-declare module WAPI {
-  const arrayBufferToBase64: (buffer: ArrayBuffer) => string;
-  const downloadFile: (data: string) => Promise<string | boolean>;
-  const takeOver: () => boolean;
-  const getMessageById: (messageId: string) => Message;
-}
+import { CreateConfig } from '../config/create-config';
+import axios from 'axios';
+import treekill = require('tree-kill');
 
 export class Whatsapp extends ControlsLayer {
-  constructor(public page: Page) {
-    super(page);
+  constructor(public page: Page, session?: string, options?: CreateConfig) {
+    super(page, session, options);
   }
 
   /**
@@ -79,6 +73,22 @@ export class Whatsapp extends ControlsLayer {
    */
   public async downloadFile(data: string) {
     return await this.page.evaluate((data) => WAPI.downloadFile(data), data);
+  }
+
+  /**
+   * Download and returns the media content in base64 format
+   * @param messageId Message ou id
+   * @returns Base64 of media
+   */
+  public async downloadMedia(messageId: string | Message): Promise<string> {
+    if (typeof messageId !== 'string') {
+      messageId = messageId.id;
+    }
+
+    return await this.page.evaluate(
+      (messageId) => WAPI.downloadMedia(messageId),
+      messageId
+    );
   }
 
   /**
@@ -97,6 +107,14 @@ export class Whatsapp extends ControlsLayer {
    */
   public async useHere() {
     return await this.page.evaluate(() => WAPI.takeOver());
+  }
+
+  /**
+   * Logout whastapp
+   * @returns boolean
+   */
+  public async logout() {
+    return await this.page.evaluate(() => WAPI.logout());
   }
 
   /**
@@ -123,6 +141,11 @@ export class Whatsapp extends ControlsLayer {
     return true;
   }
 
+  /**
+   * Get message by id
+   * @param messageId string
+   * @returns Message object
+   */
   public async getMessageById(messageId: string) {
     return (await this.page.evaluate(
       (messageId: any) => WAPI.getMessageById(messageId),

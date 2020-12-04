@@ -52,41 +52,20 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNMMNMNMMMNMMNNMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
-import { Page } from 'puppeteer';
-export async function scrapeImgReload(page: Page, url): Promise<any> {
-  let click = await page.evaluate(() => {
-    let bt = document.querySelector('._3IKPF');
-    if (bt != null) {
-      return true;
-    } else {
-      return void 0;
-    }
-  });
-  if (click != undefined) {
-    page.click('._3IKPF');
-    await page.waitForNavigation();
-    console.log('Load button pressed');
+
+import * as path from 'path';
+import * as mime from 'mime-types';
+
+export function filenameFromMimeType(
+  filename: string,
+  mimeType: string
+): string {
+  const filenameExtension = path.extname(filename);
+  const mimeExtension = mime.extension(mimeType);
+
+  if (!mimeExtension || filenameExtension === mimeExtension) {
+    return filename;
   }
-  var result = await page.evaluate(() => {
-    let selector = document.querySelector('._1QMFu');
-    if (selector != null) {
-      return selector.getAttribute('data-ref');
-    } else {
-      return void 0;
-    }
-  });
-  if (result != undefined) {
-    if (typeof url == 'undefined' || url == null) {
-      return { url: result, status: false };
-    } else {
-      if (result != url) {
-        url = result;
-        return { url: result, status: true };
-      } else {
-        return { url: result, status: false };
-      }
-    }
-  } else {
-    return void 0;
-  }
+
+  return path.basename(filename, filenameExtension) + '.' + mimeExtension;
 }

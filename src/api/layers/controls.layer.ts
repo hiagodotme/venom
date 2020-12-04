@@ -53,31 +53,12 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
 import { Page } from 'puppeteer';
+import { CreateConfig } from '../../config/create-config';
 import { UILayer } from './ui.layer';
 
-declare module WAPI {
-  const deleteConversation: (chatId: string) => boolean;
-  const archiveChat: (chatId: string, option: boolean) => boolean;
-  const pinChat: (
-    chatId: string,
-    option: boolean,
-    nonExistent?: boolean
-  ) => Promise<object>;
-  const clearChat: (chatId: string) => void;
-  const deleteMessages: (
-    contactId: string,
-    messageId: string[] | string,
-    onlyLocal: boolean
-  ) => any;
-  const markUnseenMessage: (messageId: string) => boolean;
-  const blockContact: (messageId: string) => boolean;
-  const unblockContact: (messageId: string) => boolean;
-  const setMessagesAdminsOnly: (chatId: string, option: boolean) => boolean;
-}
-
 export class ControlsLayer extends UILayer {
-  constructor(page: Page) {
-    super(page);
+  constructor(public page: Page, session?: string, options?: CreateConfig) {
+    super(page, session, options);
   }
 
   /**
@@ -150,7 +131,7 @@ export class ControlsLayer extends UILayer {
    */
   public async pinChat(chatId: string, option: boolean, nonExistent?: boolean) {
     return new Promise(async (resolve, reject) => {
-      var result = await this.page.evaluate(
+      const result = await this.page.evaluate(
         ({ chatId, option, nonExistent }) => {
           return WAPI.pinChat(chatId, option, nonExistent);
         },

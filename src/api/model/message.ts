@@ -52,7 +52,6 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNMMNMNMMMNMMNNMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
-
 export interface Message {
   id: string;
   body: string;
@@ -109,11 +108,23 @@ export interface Message {
     contact: Sender;
     groupMetadata: null;
     presence: Presence;
-    isOnline: null;
-    lastSeen: null;
+    /**
+     * @deprecated This is unreliable. Use the method {@link Whatsapp.getChatIsOnline} instead.
+     */
+    isOnline: null | boolean;
+    /**
+     * @deprecated This is unreliable. Use the method {@link Whatsapp.getLastSeen} instead.
+     */
+    lastSeen: null | number | boolean;
   };
-  isOnline: null;
-  lastSeen: null;
+  /**
+   * @deprecated This is unreliable. Use the method {@link Whatsapp.getChatIsOnline} instead.
+   */
+  isOnline: null | boolean;
+  /**
+   * @deprecated This is unreliable. Use the method {@link Whatsapp.getLastSeen} instead.
+   */
+  lastSeen: null | number | boolean;
   chatId: string;
   quotedMsgObj: null;
   mediaData: MediaData;

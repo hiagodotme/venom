@@ -53,56 +53,14 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
 import { Page } from 'puppeteer';
-import {
-  Chat,
-  Contact,
-  ContactStatus,
-  Message,
-  PartialMessage,
-  WhatsappProfile,
-} from '../model';
+import { CreateConfig } from '../../config/create-config';
+import { tokenSession } from '../../config/tokenSession.config';
+import { WhatsappProfile } from '../model';
 import { SenderLayer } from './sender.layer';
 
-declare module WAPI {
-  const getTheme: () => string;
-  const getBlockList: () => Contact[];
-  const getAllChatsWithNewMsg: () => Chat[];
-  const getAllNewMessages: () => any;
-  const getAllChats: () => Chat[];
-  const getAllChatsWithMessages: (withNewMessageOnly?: boolean) => Chat[];
-  const getContact: (contactId: string) => Contact;
-  const getAllContacts: () => Contact[];
-  const getChatById: (contactId: string) => Chat;
-  const getChat: (contactId: string) => Chat;
-  const getProfilePicFromServer: (chatId: string) => string;
-  const checkNumberStatus: (contactId: string) => any;
-  const loadEarlierMessages: (contactId: string) => Message[];
-  const getStatus: (contactId: string) => ContactStatus;
-  const getNumberProfile: (contactId: string) => WhatsappProfile;
-  const getUnreadMessages: (
-    includeMe: boolean,
-    includeNotifications: boolean,
-    useUnreadCount: boolean
-  ) => any;
-  const getAllUnreadMessages: () => PartialMessage[];
-  const getAllMessagesInChat: (
-    chatId: string,
-    includeMe: boolean,
-    includeNotifications: boolean
-  ) => Message[];
-  const getChatIsOnline: (chatId: string) => any;
-  const loadAndGetAllMessagesInChat: (
-    chatId: string,
-    includeMe: boolean,
-    includeNotifications: boolean
-  ) => Message[];
-  const getSessionTokenBrowser: (removePath?: boolean) => void;
-  const getListMute: (type?: string) => object;
-}
-
 export class RetrieverLayer extends SenderLayer {
-  constructor(page: Page) {
-    super(page);
+  constructor(public page: Page, session?: string, options?: CreateConfig) {
+    super(page, session, options);
   }
 
   /**
@@ -121,7 +79,9 @@ export class RetrieverLayer extends SenderLayer {
    * Returns browser session token
    * @returns obj [token]
    */
-  public async getSessionTokenBrowser(removePath?: boolean) {
+  public async getSessionTokenBrowser(
+    removePath?: boolean
+  ): Promise<tokenSession> {
     if (removePath === true) {
       await this.page.evaluate(() => {
         window['pathSession'] = true;
@@ -163,7 +123,7 @@ export class RetrieverLayer extends SenderLayer {
    * @param contactId, you need to include the @c.us at the end.
    * @returns contact detial as promise
    */
-  public async checkNumberStatus(contactId: string) {
+  public async checkNumberStatus(contactId: string): Promise<WhatsappProfile> {
     return await this.page.evaluate(
       (contactId) => WAPI.checkNumberStatus(contactId),
       contactId
@@ -371,10 +331,21 @@ export class RetrieverLayer extends SenderLayer {
    * Checks if a CHAT contact is online.
    * @param chatId chat id: xxxxx@c.us
    */
-  public async getChatIsOnline(chatId: string) {
-    return (await this.page.evaluate(
-      (chatId: any) => WAPI.getChatIsOnline(chatId),
+  public async getChatIsOnline(chatId: string): Promise<boolean> {
+    return await this.page.evaluate(
+      (chatId: string) => WAPI.getChatIsOnline(chatId),
       chatId
-    )) as Promise<boolean>;
+    );
+  }
+
+  /**
+   * Retrieves the last seen of a CHAT.
+   * @param chatId chat id: xxxxx@c.us
+   */
+  public async getLastSeen(chatId: string): Promise<number | boolean> {
+    return await this.page.evaluate(
+      (chatId: string) => WAPI.getLastSeen(chatId),
+      chatId
+    );
   }
 }

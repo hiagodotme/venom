@@ -53,31 +53,13 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
 import { Page } from 'puppeteer';
-import { Contact, GroupCreation, Id } from '../model';
+import { CreateConfig } from '../../config/create-config';
+import { Id } from '../model';
 import { RetrieverLayer } from './retriever.layer';
 
-declare module WAPI {
-  const leaveGroup: (groupId: string) => any;
-  const getGroupParticipantIDs: (groupId: string) => Id[];
-  const getGroupInviteLink: (chatId: string) => Promise<string>;
-  const getGroupInfoFromInviteLink: (
-    inviteCode: string
-  ) => Promise<string | boolean>;
-  const createGroup: (
-    groupName: string,
-    contactId: string | string[]
-  ) => GroupCreation;
-  const removeParticipant: (groupId: string, contactId: string) => void;
-  const addParticipant: (groupId: string, contactId: string) => boolean;
-  const promoteParticipant: (groupId: string, contactId: string) => void;
-  const demoteParticipant: (groupId: string, contactId: string) => void;
-  const getGroupAdmins: (groupId: string) => Contact[];
-  const joinGroup: (groupId: string) => Promise<string | boolean>;
-}
-
 export class GroupLayer extends RetrieverLayer {
-  constructor(page: Page) {
-    super(page);
+  constructor(public page: Page, session?: string, options?: CreateConfig) {
+    super(page, session, options);
   }
 
   /**
@@ -155,7 +137,10 @@ export class GroupLayer extends RetrieverLayer {
    * @param groupId Chat id ('0000000000-00000000@g.us')
    * @param participantId Participant id'000000000000@c.us'
    */
-  public async removeParticipant(groupId: string, participantId: string) {
+  public async removeParticipant(
+    groupId: string,
+    participantId: string | string[]
+  ) {
     return await this.page.evaluate(
       ({ groupId, participantId }) =>
         WAPI.removeParticipant(groupId, participantId),
@@ -168,7 +153,10 @@ export class GroupLayer extends RetrieverLayer {
    * @param groupId Chat id ('0000000000-00000000@g.us')
    * @param participantId Participant id'000000000000@c.us'
    */
-  public async addParticipant(groupId: string, participantId: string) {
+  public async addParticipant(
+    groupId: string,
+    participantId: string | string[]
+  ) {
     return await this.page.evaluate(
       ({ groupId, participantId }) =>
         WAPI.addParticipant(groupId, participantId),
@@ -181,7 +169,10 @@ export class GroupLayer extends RetrieverLayer {
    * @param groupId Chat id ('0000000000-00000000@g.us')
    * @param participantId Participant id'000000000000@c.us'
    */
-  public async promoteParticipant(groupId: string, participantId: string) {
+  public async promoteParticipant(
+    groupId: string,
+    participantId: string | string[]
+  ) {
     return await this.page.evaluate(
       ({ groupId, participantId }) =>
         WAPI.promoteParticipant(groupId, participantId),
@@ -194,7 +185,10 @@ export class GroupLayer extends RetrieverLayer {
    * @param groupId Chat id ('0000000000-00000000@g.us')
    * @param participantId Participant id'000000000000@c.us'
    */
-  public async demoteParticipant(groupId: string, participantId: string) {
+  public async demoteParticipant(
+    groupId: string,
+    participantId: string | string[]
+  ) {
     return await this.page.evaluate(
       ({ groupId, participantId }) =>
         WAPI.demoteParticipant(groupId, participantId),

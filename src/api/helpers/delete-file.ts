@@ -54,13 +54,14 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
 import path = require('path');
 import { unlinkSync, existsSync } from 'fs';
+import * as Spinnies from 'spinnies';
 export function deleteFiles(
   mergedOptions: any,
   Session: String,
-  spinnies: any
+  spinnies: Spinnies
 ) {
   spinnies.add(`removeFile`, { text: '....' });
-  var pathTokens: string = path.join(
+  const pathTokens: string = path.join(
     path.resolve(
       process.cwd() + mergedOptions.mkdirFolderToken,
       mergedOptions.folderNameToken

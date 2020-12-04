@@ -385,4 +385,33 @@ export const storeObjects = [
     conditions: (module) =>
       module.default && module.default.handlePendingInvite ? module : null,
   },
+  {
+    id: 'i10n',
+    conditions: (module) =>
+      module.default && module.default.downloadAppLocale
+        ? module.default
+        : null,
+  },
+  {
+    id: 'NetworkStatus',
+    conditions: (module) =>
+      module.default && module.default._logOnlineOffline
+        ? module.default
+        : null,
+  },
+  {
+    id: 'Stream',
+    conditions: (module) =>
+      module.default && module.default.unobscure ? module.default : null,
+  },
+  {
+    id: 'ws2',
+    conditions: (module) =>
+      module.default && module.default.destroyStorage ? module.default : null,
+  },
+  {
+    id: 'BlobCache',
+    conditions: (module) =>
+      module.default && module.default.getOrCreateURL ? module.default : null,
+  },
 ];

@@ -57,21 +57,14 @@ import { HostLayer } from './host.layer';
 import {
   base64MimeType,
   fileToBase64,
-  downloadFileImgHttp,
+  downloadFileToBase64,
   resizeImg,
 } from '../helpers';
-
-declare module WAPI {
-  const setMyStatus: (to: string) => void;
-  const setMyName: (name: string) => void;
-  const setProfilePic: (path: string) => Promise<boolean>;
-  const setTheme: (theme?: string) => boolean;
-  const sendMute: (id: string, time: number, type: string) => Promise<object>;
-}
+import { CreateConfig } from '../../config/create-config';
 
 export class ProfileLayer extends HostLayer {
-  constructor(public page: Page) {
-    super(page);
+  constructor(public page: Page, session?: string, options?: CreateConfig) {
+    super(page, session, options);
   }
 
   /**
@@ -82,7 +75,7 @@ export class ProfileLayer extends HostLayer {
    */
   public sendMute(id: string, time: number, type: string): Promise<object> {
     return new Promise(async (resolve, reject) => {
-      var result = await this.page.evaluate(
+      const result = await this.page.evaluate(
         (id, time, type) => WAPI.sendMute(id, time, type),
         id,
         time,
@@ -122,9 +115,11 @@ export class ProfileLayer extends HostLayer {
    * @param name
    */
   public async setProfilePic(path: string) {
-    let b64 = await downloadFileImgHttp(path, [
+    let b64 = await downloadFileToBase64(path, [
+      'image/gif',
       'image/png',
       'image/jpg',
+      'image/jpeg',
       'image/webp',
     ]);
     if (!b64) {
@@ -132,15 +127,15 @@ export class ProfileLayer extends HostLayer {
     }
     if (b64) {
       const buff = Buffer.from(
-        b64.replace(/^data:image\/(png|jpeg|webp);base64,/, ''),
+        b64.replace(/^data:image\/(png|jpe?g|webp);base64,/, ''),
         'base64'
       );
       const mimeInfo = base64MimeType(b64);
 
       if (!mimeInfo || mimeInfo.includes('image')) {
-        var _webb64_96 = await resizeImg(buff, { width: 96, height: 96 }),
+        let _webb64_96 = await resizeImg(buff, { width: 96, height: 96 }),
           _webb64_640 = await resizeImg(buff, { width: 640, height: 640 });
-        var obj = { a: _webb64_640, b: _webb64_96 };
+        let obj = { a: _webb64_640, b: _webb64_96 };
 
         return await this.page.evaluate(({ obj }) => WAPI.setProfilePic(obj), {
           obj,

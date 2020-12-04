@@ -52,109 +52,29 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNMMNMNMMMNMMNNMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
+import * as path from 'path';
 import { Page } from 'puppeteer';
+import { CreateConfig } from '../../config/create-config';
 import {
   base64MimeType,
+  downloadFileToBase64,
   fileToBase64,
-  downloadFileImgHttp,
-  stickerSelect,
   MINES,
+  stickerSelect,
 } from '../helpers';
-import { Chat, Message } from '../model';
+import { filenameFromMimeType } from '../helpers/filename-from-mimetype';
+import {
+  Message,
+  SendFileResult,
+  SendLinkResult,
+  SendStickerResult,
+} from '../model';
 import { ChatState } from '../model/enum';
 import { ListenerLayer } from './listener.layer';
 
-declare module WAPI {
-  const sendSeen: (to: string) => void;
-  const getChat: (contactId: string) => Chat;
-  const startTyping: (to: string) => void;
-  const stopTyping: (to: string) => void;
-  const sendMessage: (to: string, content: string) => Promise<object>;
-  const sendMessageOptions: (chat: any, content: any, options?: any) => any;
-  const sendImage: (
-    imgBase64: string,
-    to: string,
-    filename: string,
-    caption?: string
-  ) => Promise<object>;
-  const sendMessageWithThumb: (
-    thumb: string,
-    url: string,
-    title: string,
-    description: string,
-    chatId: string
-  ) => void;
-  const reply: (
-    to: string,
-    content: string,
-    quotedMsg: string | Message,
-    mentioned: string[]
-  ) => void;
-  const sendPtt: (
-    base64: string,
-    to: string,
-    filename: string,
-    caption: string
-  ) => any;
-  const sendFile: (
-    base64: string,
-    to: string,
-    filename: string,
-    caption: string,
-    type?: string
-  ) => Promise<object>;
-  const sendVideoAsGif: (
-    base64: string,
-    to: string,
-    filename: string,
-    caption: string
-  ) => void;
-
-  const forwardMessages: (
-    to: string,
-    messages: string | string[],
-    skipMyMessages: boolean
-  ) => any;
-
-  const sendContactVcard: (
-    to: string,
-    contact: string,
-    name?: string
-  ) => Promise<object>;
-  const sendContactVcardList: (
-    to: string,
-    contacts: string[]
-  ) => Promise<object>;
-  const sendImageAsSticker: (
-    webpBase64: string,
-    to: string,
-    metadata?: any,
-    type?: string
-  ) => object;
-  const sendImageAsStickerGif: (
-    webpBase64: string,
-    to: string,
-    metadata?: any
-  ) => object;
-  const sendLocation: (
-    to: string,
-    latitude: string,
-    longitude: string,
-    title: string
-  ) => Promise<object>;
-
-  const sendMessageMentioned: (...args: any) => any;
-  const setChatState: (chatState: string, chatId: string) => void;
-  const sendLinkPreview: (
-    chatId: string,
-    url: string,
-    title: string
-  ) => Promise<object>;
-}
-
 export class SenderLayer extends ListenerLayer {
-  constructor(public page: Page) {
-    super(page);
+  constructor(public page: Page, session?: string, options?: CreateConfig) {
+    super(page, session, options);
   }
 
   /**
@@ -163,9 +83,13 @@ export class SenderLayer extends ListenerLayer {
    * @param url string A link, for example for youtube. e.g https://www.youtube.com/watch?v=Zi_XLOBDo_Y&list=RDEMe12_MlgO8mGFdeeftZ2nOQ&start_radio=1
    * @param title custom text as the message body, this includes the link or will be attached after the link
    */
-  public async sendLinkPreview(chatId: string, url: string, title: string) {
+  public async sendLinkPreview(
+    chatId: string,
+    url: string,
+    title: string
+  ): Promise<SendLinkResult> {
     return new Promise(async (resolve, reject) => {
-      var result = await this.page.evaluate(
+      const result = await this.page.evaluate(
         ({ chatId, url, title }) => {
           return WAPI.sendLinkPreview(chatId, url, title);
         },
@@ -184,14 +108,18 @@ export class SenderLayer extends ListenerLayer {
    * @param to chat id: xxxxx@us.c
    * @param content text message
    */
-  public async sendText(to: string, content: string): Promise<object> {
+  public async sendText(to: string, content: string): Promise<Message> {
     return new Promise(async (resolve, reject) => {
-      var result = await this.page.evaluate(
+      const messageId: string = await this.page.evaluate(
         ({ to, content }) => {
           return WAPI.sendMessage(to, content);
         },
         { to, content }
       );
+      const result = (await this.page.evaluate(
+        (messageId: any) => WAPI.getMessageById(messageId),
+        messageId
+      )) as Message;
       if (result['erro'] == true) {
         reject(result);
       } else {
@@ -204,15 +132,19 @@ export class SenderLayer extends ListenerLayer {
     chat: any,
     content: any,
     options?: any
-  ): Promise<any> {
+  ): Promise<Message> {
     return new Promise(async (resolve, reject) => {
       try {
-        var result = await this.page.evaluate(
+        const messageId = await this.page.evaluate(
           ({ chat, content, options }) => {
             return WAPI.sendMessageOptions(chat, content, options);
           },
           { chat, content, options }
         );
+        const result = (await this.page.evaluate(
+          (messageId: any) => WAPI.getMessageById(messageId),
+          messageId
+        )) as Message;
         resolve(result);
       } catch (error) {
         reject(error);
@@ -223,56 +155,94 @@ export class SenderLayer extends ListenerLayer {
   /**
    * Sends image message
    * @param to Chat id
-   * @param imgBase64
+   * @param filePath File path or http link
    * @param filename
    * @param caption
    */
   public async sendImage(
     to: string,
-    path: string,
-    filename: string,
+    filePath: string,
+    filename?: string,
     caption?: string
-  ) {
+  ): Promise<SendFileResult> {
     return new Promise(async (resolve, reject) => {
-      let data = await downloadFileImgHttp(path, [
+      let base64 = await downloadFileToBase64(filePath, [
+        'image/gif',
         'image/png',
         'image/jpg',
+        'image/jpeg',
         'image/webp',
       ]);
-      if (!data) {
-        data = await fileToBase64(path);
+
+      if (!base64) {
+        base64 = await fileToBase64(filePath);
       }
-      var extension = path.split('.').pop();
-      filename = filename + '.' + extension;
-      if (data) {
-        const mimeInfo = base64MimeType(data);
-        if (!mimeInfo || mimeInfo.includes('image')) {
-          var result = await this.page.evaluate(
-            ({ to, data, filename, caption }) => {
-              return WAPI.sendImage(data, to, filename, caption);
-            },
-            { to, data, filename, caption }
-          );
-          if (result['erro'] == true) {
-            reject(result);
-          } else {
-            resolve(result);
-          }
-        } else {
-          var obj = {
-            erro: true,
-            to: to,
-            text: 'Not an image, allowed formats png, jpeg and webp',
-          };
-          reject(obj);
-        }
-      } else {
-        var obj = {
+
+      if (!base64) {
+        const obj = {
           erro: true,
           to: to,
-          text: 'No such file or directory, open "' + path + '"',
+          text: 'No such file or directory, open "' + filePath + '"',
         };
-        reject(obj);
+        return reject(obj);
+      }
+
+      if (!filename) {
+        filename = path.basename(filePath);
+      }
+
+      this.sendImageFromBase64(to, base64, filename, caption)
+        .then(resolve)
+        .catch(reject);
+    });
+  }
+
+  /**
+   * Sends image message
+   * @param to Chat id
+   * @param base64 File path, http link or base64Encoded
+   * @param filename
+   * @param caption
+   */
+  public async sendImageFromBase64(
+    to: string,
+    base64: string,
+    filename: string,
+    caption?: string
+  ): Promise<SendFileResult> {
+    return new Promise(async (resolve, reject) => {
+      let mimeType = base64MimeType(base64);
+
+      if (!mimeType) {
+        const obj = {
+          erro: true,
+          to: to,
+          text: 'Invalid base64!',
+        };
+        return reject(obj);
+      }
+
+      if (!mimeType.includes('image')) {
+        const obj = {
+          erro: true,
+          to: to,
+          text: 'Not an image, allowed formats png, jpeg and webp',
+        };
+        return reject(obj);
+      }
+
+      filename = filenameFromMimeType(filename, mimeType);
+
+      const result = await this.page.evaluate(
+        ({ to, base64, filename, caption }) => {
+          return WAPI.sendImage(base64, to, filename, caption);
+        },
+        { to, base64, filename, caption }
+      );
+      if (result['erro'] == true) {
+        reject(result);
+      } else {
+        resolve(result);
       }
     });
   }
@@ -311,20 +281,29 @@ export class SenderLayer extends ListenerLayer {
    * @param to Chat id
    * @param content Message body
    * @param quotedMsg Message id to reply to.
-   * @param mentioned User id to mentioned (just phone number).
    */
   public async reply(
     to: string,
     content: string,
-    quotedMsg: string,
-    mentioned: string[]
-  ) {
-    return await this.page.evaluate(
-      ({ to, content, quotedMsg, mentioned }) => {
-        return WAPI.reply(to, content, quotedMsg, mentioned);
-      },
-      { to, content, quotedMsg, mentioned }
-    );
+    quotedMsg: string
+  ): Promise<Message> {
+    return new Promise(async (resolve, reject) => {
+      const messageId: string = await this.page.evaluate(
+        ({ to, content, quotedMsg }) => {
+          return WAPI.reply(to, content, quotedMsg);
+        },
+        { to, content, quotedMsg }
+      );
+      const result = (await this.page.evaluate(
+        (messageId: any) => WAPI.getMessageById(messageId),
+        messageId
+      )) as Message;
+      if (result['erro'] == true) {
+        reject(result);
+      } else {
+        resolve(result);
+      }
+    });
   }
 
   /**
@@ -362,10 +341,23 @@ export class SenderLayer extends ListenerLayer {
     base64: string,
     filename: string,
     caption?: string
-  ) {
+  ): Promise<SendFileResult> {
     return new Promise(async (resolve, reject) => {
-      var type = 'FileFromBase64';
-      var result = await this.page.evaluate(
+      let mimeType = base64MimeType(base64);
+
+      if (!mimeType) {
+        const obj = {
+          erro: true,
+          to: to,
+          text: 'Invalid base64!',
+        };
+        return reject(obj);
+      }
+
+      filename = filenameFromMimeType(filename, mimeType);
+
+      const type = 'FileFromBase64';
+      const result = await this.page.evaluate(
         ({ to, base64, filename, caption, type }) => {
           return WAPI.sendFile(base64, to, filename, caption, type);
         },
@@ -382,46 +374,40 @@ export class SenderLayer extends ListenerLayer {
   /**
    * Sends file from path
    * @param to Chat id
-   * @param path File path
+   * @param filePath File path
    * @param filename
    * @param caption
    */
   public async sendFile(
     to: string,
-    path: string,
-    filename: string,
+    filePath: string,
+    filename?: string,
     caption?: string
   ) {
     return new Promise(async (resolve, reject) => {
-      var extension = path.split('.').pop();
-      filename = filename + '.' + extension;
-
-      let b64 = await downloadFileImgHttp(path, MINES()),
+      let base64 = await downloadFileToBase64(filePath, MINES()),
         obj: { erro: boolean; to: string; text: string };
-      if (!b64) {
-        b64 = await fileToBase64(path);
+
+      if (!base64) {
+        base64 = await fileToBase64(filePath);
       }
-      if (b64) {
-        var type = 'sendFile';
-        var result = await this.page.evaluate(
-          ({ to, b64, filename, caption, type }) => {
-            return WAPI.sendFile(b64, to, filename, caption, type);
-          },
-          { to, b64, filename, caption, type }
-        );
-        if (result['erro'] == true) {
-          reject(result);
-        } else {
-          resolve(result);
-        }
-      } else {
+
+      if (!base64) {
         obj = {
           erro: true,
           to: to,
-          text: 'No such file or directory, open "' + path + '"',
+          text: 'No such file or directory, open "' + filePath + '"',
         };
-        reject(obj);
+        return reject(obj);
       }
+
+      if (!filename) {
+        filename = path.basename(filePath);
+      }
+
+      this.sendFileFromBase64(to, base64, filename, caption)
+        .then(resolve)
+        .catch(reject);
     });
   }
 
@@ -476,7 +462,7 @@ export class SenderLayer extends ListenerLayer {
     name?: string
   ) {
     return new Promise(async (resolve, reject) => {
-      var result = await this.page.evaluate(
+      const result = await this.page.evaluate(
         ({ to, contactsId, name }) => {
           return WAPI.sendContactVcard(to, contactsId, name);
         },
@@ -497,7 +483,7 @@ export class SenderLayer extends ListenerLayer {
    */
   public async sendContactVcardList(to: string, contacts: string[]) {
     return new Promise(async (resolve, reject) => {
-      var result = await this.page.evaluate(
+      const result = await this.page.evaluate(
         ({ to, contacts }) => {
           return WAPI.sendContactVcardList(to, contacts);
         },
@@ -534,8 +520,11 @@ export class SenderLayer extends ListenerLayer {
    *  @param path image path imageBase64 A valid gif image is required. You can also send via http/https (http://www.website.com/img.gif)
    *  @param to chatId '000000000000@c.us'
    */
-  public async sendImageAsStickerGif(to: string, path: string) {
-    let b64 = await downloadFileImgHttp(path, ['image/gif', 'image/webp']);
+  public async sendImageAsStickerGif(
+    to: string,
+    path: string
+  ): Promise<SendStickerResult | false> {
+    let b64 = await downloadFileToBase64(path, ['image/gif', 'image/webp']);
     if (!b64) {
       b64 = await fileToBase64(path);
     }
@@ -552,7 +541,7 @@ export class SenderLayer extends ListenerLayer {
           let _met = obj['metadata'];
 
           return new Promise(async (resolve, reject) => {
-            var result = await this.page.evaluate(
+            const result = await this.page.evaluate(
               ({ _webb64, to, _met }) => {
                 return WAPI.sendImageAsSticker(_webb64, to, _met, 'StickerGif');
               },
@@ -564,6 +553,11 @@ export class SenderLayer extends ListenerLayer {
               resolve(result);
             }
           });
+        } else {
+          throw {
+            error: true,
+            message: 'Error with sharp library, check the console log',
+          };
         }
       } else {
         console.log('Not an image, allowed format gif');
@@ -577,10 +571,15 @@ export class SenderLayer extends ListenerLayer {
    * @param path image path imageBase64 A valid png, jpg and webp image is required. You can also send via http/https (http://www.website.com/img.gif)
    * @param to chatId '000000000000@c.us'
    */
-  public async sendImageAsSticker(to: string, path: string) {
-    let b64 = await downloadFileImgHttp(path, [
+  public async sendImageAsSticker(
+    to: string,
+    path: string
+  ): Promise<SendStickerResult | false> {
+    let b64 = await downloadFileToBase64(path, [
+      'image/gif',
       'image/png',
       'image/jpg',
+      'image/jpeg',
       'image/webp',
     ]);
     if (!b64) {
@@ -588,7 +587,7 @@ export class SenderLayer extends ListenerLayer {
     }
     if (b64) {
       const buff = Buffer.from(
-        b64.replace(/^data:image\/(png|jpeg|webp);base64,/, ''),
+        b64.replace(/^data:image\/(png|jpe?g|webp|gif);base64,/, ''),
         'base64'
       );
       const mimeInfo = base64MimeType(b64);
@@ -599,7 +598,7 @@ export class SenderLayer extends ListenerLayer {
           let _webb64 = obj['webpBase64'];
           let _met = obj['metadata'];
           return new Promise(async (resolve, reject) => {
-            var result = await this.page.evaluate(
+            const result = await this.page.evaluate(
               ({ _webb64, to, _met }) => {
                 return WAPI.sendImageAsSticker(_webb64, to, _met, 'Sticker');
               },
@@ -611,6 +610,11 @@ export class SenderLayer extends ListenerLayer {
               resolve(result);
             }
           });
+        } else {
+          throw {
+            error: true,
+            message: 'Error with sharp library, check the console log',
+          };
         }
       } else {
         console.log('Not an image, allowed formats png, jpeg and webp');
@@ -634,7 +638,7 @@ export class SenderLayer extends ListenerLayer {
     title: string
   ) {
     return new Promise(async (resolve, reject) => {
-      var result = await this.page.evaluate(
+      const result = await this.page.evaluate(
         ({ to, latitude, longitude, title }) => {
           return WAPI.sendLocation(to, latitude, longitude, title);
         },
@@ -693,9 +697,9 @@ export class SenderLayer extends ListenerLayer {
   public async setChatState(chatId: string, chatState: ChatState) {
     return await this.page.evaluate(
       ({ chatState, chatId }) => {
-        WAPI.setChatState(chatState, chatId);
+        WAPI.sendChatstate(chatState, chatId);
       },
-      { chatState: chatState, chatId }
+      { chatState, chatId }
     );
   }
 }

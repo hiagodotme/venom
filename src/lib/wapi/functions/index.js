@@ -1,5 +1,3 @@
-import { format } from 'path';
-
 /*
 NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
@@ -150,3 +148,4 @@ export { pinChat } from './fix-chat';
 export { getSessionTokenBrowser } from './get-session-token';
 export { sendMute } from './send-mute';
 export { getListMute, interfaceMute } from './get-list-mute';
+export { downloadMedia } from './download-media';

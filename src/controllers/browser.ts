@@ -61,12 +61,14 @@ import { puppeteerConfig } from '../config/puppeteer.config';
 import StealthPlugin = require('puppeteer-extra-plugin-stealth');
 import { auth_InjectToken } from './auth';
 import { useragentOverride } from '../config/WAuserAgente';
+import { WebSocketTransport } from './websocket';
+import { tokenSession } from '../config/tokenSession.config';
 
 export async function initWhatsapp(
   session: string,
   options: CreateConfig,
   browser: any,
-  token?: object
+  token?: tokenSession
 ) {
   const waPage = await getWhatsappPage(browser);
   if (waPage != null) {
@@ -88,9 +90,23 @@ export async function initWhatsapp(
 }
 
 export async function injectApi(page: Page) {
+  const injected = await page
+    .evaluate(() => {
+      // @ts-ignore
+      return (
+        typeof window.WAPI !== 'undefined' &&
+        typeof window.Store !== 'undefined'
+      );
+    })
+    .catch(() => false);
+
+  if (injected) {
+    return;
+  }
+
   await page.waitForFunction(() => {
     // @ts-ignore
-    return webpackJsonp !== undefined;
+    return typeof webpackJsonp !== 'undefined';
   });
 
   await page.addScriptTag({
@@ -106,7 +122,9 @@ export async function injectApi(page: Page) {
   // Make sure WAPI is initialized
   await page.waitForFunction(() => {
     // @ts-ignore
-    return !!WAPI.getWAVersion;
+    return (
+      typeof window.WAPI !== 'undefined' && typeof window.Store !== 'undefined'
+    );
   });
 
   return page;
@@ -120,7 +138,7 @@ export async function initBrowser(
   session: string,
   options: CreateConfig,
   extras = {}
-) {
+): Promise<Browser | string> {
   if (options.useChrome) {
     const chromePath = getChrome();
     if (chromePath) {
@@ -136,16 +154,24 @@ export async function initBrowser(
 
   let browser = null;
   if (options.browserWS && options.browserWS != '') {
-    await puppeteer
-      .connect({
-        browserWSEndpoint: options.browserWS,
-      })
-      .then((e) => {
-        browser = e;
-      })
-      .catch(() => {
-        browser = 'connect';
-      });
+    const transport = await WebSocketTransport.create(
+      options.browserWS,
+      10000
+    ).catch(() => {
+      browser = 'connect';
+    });
+    if (transport) {
+      await puppeteer
+        .connect({
+          transport: transport,
+        })
+        .then((e) => {
+          browser = e;
+        })
+        .catch(() => {
+          browser = 'connect';
+        });
+    }
   } else {
     await puppeteer
       .launch({
@@ -168,7 +194,7 @@ export async function initBrowser(
   return browser;
 }
 
-async function getWhatsappPage(browser: Browser) {
+async function getWhatsappPage(browser: Browser): Promise<Page> {
   let pages = null;
   await browser
     .pages()

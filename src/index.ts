@@ -52,21 +52,7 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNMMNMNMMMNMMNNMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
-export {
-  Ack,
-  Chat,
-  Contact,
-  ContactStatus,
-  GroupCreation,
-  GroupMetadata,
-  HostDevice,
-  Id,
-  LiveLocation,
-  Message,
-  PartialMessage,
-  ParticipantEvent,
-  WhatsappProfile,
-} from './api/model';
+export * from './api/model';
 export {
   AckType,
   ChatState,
@@ -76,4 +62,5 @@ export {
   SocketState,
 } from './api/model/enum';
 export { Whatsapp } from './api/whatsapp';
+export { CreateConfig } from './config/create-config';
 export { create } from './controllers/initializer';

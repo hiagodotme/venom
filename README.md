@@ -2,16 +2,31 @@
 
 ![enter image description here](https://s2.click/venom.jpg)
 
+[![npm version](https://img.shields.io/npm/v/venom-bot.svg?color=green)](https://www.npmjs.com/package/venom-bot)
+![node](https://img.shields.io/node/v/venom-bot)
+[![Downloads](https://img.shields.io/npm/dm/venom-bot.svg)](https://www.npmjs.com/package/venom-bot)
+[![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/orkestral/venom.svg)](http://isitmaintained.com/project/orkestral/venom 'Average time to resolve an issue')
+[![Percentage of issues still open](http://isitmaintained.com/badge/open/orkestral/venom.svg)](http://isitmaintained.com/project/orkestral/venom 'Percentage of issues still open')
+<a href="https://discord.gg/qCJ95FVbzR"><img src="https://img.shields.io/discord/772885202351292426?color=blueviolet&label=discord&style=flat" /></a>
+
+[![Build Status](https://img.shields.io/github/workflow/status/orkestral/venom/build.svg)](https://github.com/orkestral/venom/actions)
+[![Lint Status](https://img.shields.io/github/workflow/status/orkestral/venom/lint.svg?label=lint)](https://github.com/orkestral/venom/actions)
+[![release-it](https://img.shields.io/badge/%F0%9F%93%A6%F0%9F%9A%80-release--it-e10079.svg)](https://github.com/release-it/release-it)
+
 > Venom is a high-performance system developed with JavaScript to create a bot for WhatsApp, support for creating any interaction, such as customer service, media sending, sentence recognition based on artificial intelligence and all types of design architecture for WhatsApp.
 
+<p align="center">
+  <a href="https://orkestral.github.io/venom/pages/Getting%20Started/creating-client.html">Getting Started</a> •
+  <a href="https://orkestral.github.io/venom/pages/Getting%20Started/basic-functions.html">Basic Function</a> •
+  <a href="https://orkestral.github.io/venom">Documentation</a>
+</p>
 
 **Donate for Project**
 
-<a target="_blank" href="https://www.paypal.com/donate?hosted_button_id=62BBB32FGRB2A"><img width="227" height="68" src="./donate.png" alt="Consulting"></a>
+<a target="_blank" href="https://www.paypal.com/donate?hosted_button_id=62BBB32FGRB2A"><img width="227" height="68" src="./media/donate.png" alt="Consulting"></a>
 
-**Access our whatsapp** <br> <br>
-<a target="_blank" href="https://chat.whatsapp.com/CMJYfPFqRyE2GxrnkldYED" target="_blank"><img title="whatzapp" height="100" width="375" src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/WhatsApp_logo.svg/2000px-WhatsApp_logo.svg.png"></a>
-
+**Request Support Group Access In Whatsapp For \$5 Month** <br> <br>
+<a target="_blank" href="https://web.whatsapp.com/send?phone=556181590153&text=I%20want%20access%20to%20the%20WhatsApp%20Venom%20support%20group" target="_blank"><img title="whatzapp" height="100" width="375" src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/WhatsApp_logo.svg/2000px-WhatsApp_logo.svg.png"></a>
 
 ## 🕷🕷 Functions Venom🕷🕷
 
@@ -30,10 +45,18 @@
 | 📍 Send location!!                                         | ✔   |
 | 🕸🕸 **and much more**                                       | ✔   |
 
+Documentation at https://orkestral.github.io/venom/index.html
+
 ## Installation
 
 ```bash
 > npm i --save venom-bot
+```
+
+or for [Nightly releases](https://github.com/orkestral/venom/releases/tag/nightly):
+
+```bash
+> npm i --save https://github.com/orkestral/venom/releases/download/nightly/venom-bot-nightly.tgz
 ```
 
 ## Getting started
@@ -94,10 +117,11 @@ venom
     //session
     'sessionName', //Pass the name of the client you want to start the bot
     //catchQR
-    (base64Qrimg, asciiQR, attempts) => {
+    (base64Qrimg, asciiQR, attempts, urlCode) => {
       console.log('Number of attempts to read the qrcode: ', attempts);
       console.log('Terminal qrcode: ', asciiQR);
       console.log('base64 image string qrcode: ', base64Qrimg);
+      console.log('urlCode (data-ref): ', urlCode);
     },
     // statusFind
     (statusSession, session) => {
@@ -191,7 +215,7 @@ const venom = require('venom-bot');
 venom
   .create(
     'sessionName',
-    (base64Qr, asciiQR) => {
+    (base64Qr, asciiQR, attempts, urlCode) => {
       console.log(asciiQR); // Optional to log the QR in the terminal
       var matches = base64Qr.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/),
         response = {};
@@ -603,7 +627,20 @@ client.onStateChange(state => {
 
 // Listen to ack's
 // See the status of the message when sent.
-// When receiving the confirmation object, "ack" may return: "INACTIVE", "CONTENT_UNUPLOADABLE", "CONTENT_TOO_BIG", "CONTENT_GONE", "EXPIRED", "FAILED", "CLOCK", "SENT", "RECEIVED", "RECEIVED", "READ" or "PLAYED".
+// When receiving the confirmation object, "ack" may return a number, look {@link AckType} for details:
+// -7 = MD_DOWNGRADE,
+// -6 = INACTIVE,
+// -5 = CONTENT_UNUPLOADABLE,
+// -4 = CONTENT_TOO_BIG,
+// -3 = CONTENT_GONE,
+// -2 = EXPIRED,
+// -1 = FAILED,
+//  0 = CLOCK,
+//  1 = SENT,
+//  2 = RECEIVED,
+//  3 = READ,
+//  4 = PLAYED =
+
 client.onAck(ack => {
   ...
 });

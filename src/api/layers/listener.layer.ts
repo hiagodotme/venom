@@ -52,21 +52,13 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNMMNMNMMMNMMNNMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
+import { EventEmitter } from 'events';
 import { Page } from 'puppeteer';
+import { CreateConfig } from '../../config/create-config';
 import { ExposedFn } from '../helpers/exposed.enum';
 import { Ack, Chat, LiveLocation, Message, ParticipantEvent } from '../model';
 import { SocketState } from '../model/enum';
 import { ProfileLayer } from './profile.layer';
-
-declare module WAPI {
-  const waitNewMessages: (rmCallback: boolean, callback: Function) => void;
-  const allNewMessagesListener: (callback: Function) => void;
-  const onStateChange: (callback: Function) => void;
-  const onAddedToGroup: (callback: Function) => any;
-  const onParticipantsChanged: (groupId: string, callback: Function) => any;
-  const onLiveLocation: (chatId: string, callback: Function) => any;
-  const onIncomingCall: (callback: Function) => any;
-}
 
 declare global {
   interface Window {
@@ -79,23 +71,76 @@ declare global {
 }
 
 export class ListenerLayer extends ProfileLayer {
-  constructor(public page: Page) {
-    super(page);
+  private listenerEmitter = new EventEmitter();
+
+  constructor(public page: Page, session?: string, options?: CreateConfig) {
+    super(page, session, options);
+
+    this.listenerEmitter.on(ExposedFn.onStateChange, (state) => {
+      this.spinStatus.state = state;
+      this.spin();
+    });
+  }
+
+  protected async initialize() {
+    await super.initialize();
+
+    const functions = [
+      ...Object.values(ExposedFn),
+      'onAddedToGroup',
+      'onIncomingCall',
+    ];
+
+    for (const func of functions) {
+      const has = await this.page
+        .evaluate((func) => typeof window[func] === 'function', func)
+        .catch(() => false);
+
+      if (!has) {
+        await this.page
+          .exposeFunction(func, (...args) =>
+            this.listenerEmitter.emit(func, ...args)
+          )
+          .catch(() => {});
+      }
+    }
+
+    await this.page
+      .evaluate(() => {
+        if (!window['onAnyMessage'].exposed) {
+          window.WAPI.allNewMessagesListener(window['onAnyMessage']);
+          window['onAnyMessage'].exposed = true;
+        }
+        if (!window['onStateChange'].exposed) {
+          window.WAPI.onStateChange((s: any) =>
+            window['onStateChange'](s.state)
+          );
+          window['onStateChange'].exposed = true;
+        }
+        if (!window['onAddedToGroup'].exposed) {
+          window.WAPI.onAddedToGroup(window['onAddedToGroup']);
+          window['onAddedToGroup'].exposed = true;
+        }
+        if (!window['onIncomingCall'].exposed) {
+          window.WAPI.onIncomingCall(window['onIncomingCall']);
+          window['onIncomingCall'].exposed = true;
+        }
+      })
+      .catch(() => {});
   }
 
   /**
-   * Listens to messages received
+   * @event Listens to messages received
    * @returns Observable stream of messages
    */
   public async onMessage(fn: (message: Message) => void) {
-    var has = await this.page.evaluate(() => {
-      return window.onMessage;
-    });
-    if (!has) {
-      await this.page.exposeFunction(ExposedFn.OnMessage, (message: Message) =>
-        fn(message)
-      );
-    }
+    this.listenerEmitter.on(ExposedFn.OnMessage, fn);
+
+    return {
+      dispose: () => {
+        this.listenerEmitter.off(ExposedFn.OnMessage, fn);
+      },
+    };
   }
 
   /**
@@ -104,20 +149,13 @@ export class ListenerLayer extends ProfileLayer {
    * @fires Message
    */
   public async onAnyMessage(fn: (message: Message) => void) {
-    var has = await this.page.evaluate(() => {
-      return window.onAnyMessage;
-    });
-    if (!has) {
-      await this.page
-        .exposeFunction(ExposedFn.OnAnyMessage, (message: Message) =>
-          fn(message)
-        )
-        .then((_) =>
-          this.page.evaluate(() => {
-            WAPI.allNewMessagesListener(window['onAnyMessage']);
-          })
-        );
-    }
+    this.listenerEmitter.on(ExposedFn.OnAnyMessage, fn);
+
+    return {
+      dispose: () => {
+        this.listenerEmitter.off(ExposedFn.OnAnyMessage, fn);
+      },
+    };
   }
 
   /**
@@ -125,20 +163,13 @@ export class ListenerLayer extends ProfileLayer {
    * @returns Observable stream of messages
    */
   public async onStateChange(fn: (state: SocketState) => void) {
-    var has = await this.page.evaluate(() => {
-      return window.onStateChange;
-    });
-    if (!has) {
-      await this.page
-        .exposeFunction(ExposedFn.onStateChange, (state: SocketState) =>
-          fn(state)
-        )
-        .then(() =>
-          this.page.evaluate(() => {
-            WAPI.onStateChange((_) => window['onStateChange'](_.state));
-          })
-        );
-    }
+    this.listenerEmitter.on(ExposedFn.onStateChange, fn);
+
+    return {
+      dispose: () => {
+        this.listenerEmitter.off(ExposedFn.onStateChange, fn);
+      },
+    };
   }
 
   /**
@@ -146,12 +177,13 @@ export class ListenerLayer extends ProfileLayer {
    * @returns Observable stream of messages
    */
   public async onAck(fn: (ack: Ack) => void) {
-    var has = await this.page.evaluate(() => {
-      return window.onAck;
-    });
-    if (!has) {
-      await this.page.exposeFunction(ExposedFn.onAck, (ack: Ack) => fn(ack));
-    }
+    this.listenerEmitter.on(ExposedFn.onAck, fn);
+
+    return {
+      dispose: () => {
+        this.listenerEmitter.off(ExposedFn.onAck, fn);
+      },
+    };
   }
 
   /**
@@ -182,6 +214,7 @@ export class ListenerLayer extends ProfileLayer {
   }
 
   /**
+   * @event Listens to participants changed
    * @param to group id: xxxxx-yyyy@us.c
    * @param to callback
    * @returns Stream of ParticipantEvent
@@ -213,15 +246,13 @@ export class ListenerLayer extends ProfileLayer {
    * @returns Observable stream of Chats
    */
   public async onAddedToGroup(fn: (chat: Chat) => any) {
-    const method = 'onAddedToGroup';
-    return this.page
-      .exposeFunction(method, (chat: any) => fn(chat))
-      .then((_) =>
-        this.page.evaluate(() => {
-          //@ts-ignore
-          WAPI.onAddedToGroup(window.onAddedToGroup);
-        })
-      );
+    this.listenerEmitter.on('onAddedToGroup', fn);
+
+    return {
+      dispose: () => {
+        this.listenerEmitter.off('onAddedToGroup', fn);
+      },
+    };
   }
 
   /**
@@ -229,14 +260,12 @@ export class ListenerLayer extends ProfileLayer {
    * @returns Observable stream of messages
    */
   public async onIncomingCall(fn: (call: any) => any) {
-    const method = 'onIncomingCall';
-    return this.page
-      .exposeFunction(method, (call: any) => fn(call))
-      .then((_) =>
-        this.page.evaluate(() => {
-          //@ts-ignore
-          WAPI.onIncomingCall(window.onIncomingCall);
-        })
-      );
+    this.listenerEmitter.on('onIncomingCall', fn);
+
+    return {
+      dispose: () => {
+        this.listenerEmitter.off('onIncomingCall', fn);
+      },
+    };
   }
 }

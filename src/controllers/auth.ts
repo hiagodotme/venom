@@ -52,13 +52,52 @@ MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNMMNMNMMMNMMNNMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMNNNNMMNNNMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM
 */
+import * as fs from 'fs';
 import * as path from 'path';
 import * as puppeteer from 'puppeteer';
 import * as qrcode from 'qrcode-terminal';
-import { from, merge } from 'rxjs';
-import { take } from 'rxjs/operators';
 import { existsSync, readFileSync } from 'fs';
 import { CreateConfig } from '../config/create-config';
+import { ScrapQrcode } from '../api/model/qrcode';
+import { tokenSession } from '../config/tokenSession.config';
+
+export const getInterfaceStatus = async (
+  waPage: puppeteer.Page
+): Promise<string | null> => {
+  return await waPage
+    .waitForFunction(
+      () => {
+        const elLoginWrapper = document.querySelector(
+          'body > div > div > .landing-wrapper'
+        );
+        const elQRCodeCanvas = document.querySelector('canvas');
+        if (elLoginWrapper && elQRCodeCanvas) {
+          return 'UNPAIRED';
+        }
+
+        const streamStatus =
+          window['Store'] &&
+          window['Store'].Stream &&
+          window['Store'].Stream.displayInfo;
+        if (['PAIRING', 'RESUMING'].includes(streamStatus)) {
+          return 'PAIRING';
+        }
+        const elChat = document.querySelector('.app,.two') as HTMLDivElement;
+        if (elChat && elChat.attributes && elChat.tabIndex) {
+          return 'CONNECTED';
+        }
+        return false;
+      },
+      {
+        timeout: 0,
+        polling: 100,
+      }
+    )
+    .then(async (element) => {
+      return await element.evaluate((a) => a);
+    })
+    .catch(() => null);
+};
 
 /**
  * Validates if client is authenticated
@@ -66,51 +105,40 @@ import { CreateConfig } from '../config/create-config';
  * @param waPage
  */
 export const isAuthenticated = async (waPage: puppeteer.Page) => {
-  try {
-    return merge(needsToScan(waPage), isInsideChat(waPage))
-      .pipe(take(1))
-      .toPromise();
-  } catch (e) {}
-};
-
-export const needsToScan = (waPage: puppeteer.Page) => {
-  return from(
-    waPage
-      .waitForSelector('body > div > div > .landing-wrapper', {
-        timeout: 0,
-      })
-      .then(() => false)
-  );
-};
-
-export const isInsideChat = (waPage: puppeteer.Page) => {
-  return from(
-    waPage
-      .waitForFunction(
-        `
-        (document.getElementsByClassName('app')[0] &&
-        document.getElementsByClassName('app')[0].attributes &&
-        !!document.getElementsByClassName('app')[0].attributes.tabindex) || 
-        (document.getElementsByClassName('two')[0] && 
-        document.getElementsByClassName('two')[0].attributes && 
-        !!document.getElementsByClassName('two')[0].attributes.tabindex)
-        `,
-        {
-          timeout: 0,
-        }
-      )
-      .then(() => true)
-      .catch(() => false)
-  );
-};
-export async function retrieveQR(page: puppeteer.Page) {
-  const { code, data } = await decodeQR(page);
-  if (data === null || code === null) {
-    return false;
+  const status = await getInterfaceStatus(waPage);
+  if (typeof status !== 'string') {
+    return null;
   }
-  const asciiQR = await asciiQr(code);
-  return { code, data, asciiQR };
-}
+
+  return ['CONNECTED', 'PAIRING'].includes(status);
+};
+
+export const needsToScan = async (waPage: puppeteer.Page) => {
+  const status = await getInterfaceStatus(waPage);
+  if (typeof status !== 'string') {
+    return null;
+  }
+
+  return status === 'UNPAIRED';
+};
+
+export const isInsideChat = async (waPage: puppeteer.Page) => {
+  const status = await getInterfaceStatus(waPage);
+  if (typeof status !== 'string') {
+    return null;
+  }
+
+  return status === 'CONNECTED';
+};
+
+export const isConnectingToPhone = async (waPage: puppeteer.Page) => {
+  const status = await getInterfaceStatus(waPage);
+  if (typeof status !== 'string') {
+    return null;
+  }
+
+  return status === 'PAIRING';
+};
 
 export async function asciiQr(code: string): Promise<string> {
   return new Promise((resolve) => {
@@ -120,32 +148,39 @@ export async function asciiQr(code: string): Promise<string> {
   });
 }
 
-async function decodeQR(
+export async function retrieveQR(
   page: puppeteer.Page
-): Promise<{ code: string; data: string }> {
-  await page.waitForSelector('canvas', { timeout: 0 });
+): Promise<ScrapQrcode | undefined> {
+  const hasCanvas = await page.evaluate(
+    () => document.querySelector('canvas') !== null
+  );
+
+  if (!hasCanvas) {
+    return undefined;
+  }
 
   await page.addScriptTag({
     path: require.resolve(path.join(__dirname, '../lib/jsQR', 'jsQR.js')),
   });
 
-  return await page.evaluate(() => {
-    const canvas = document.querySelector('canvas') || null;
-    if (canvas !== null) {
-      const context = canvas.getContext('2d') || null;
-      if (context !== null) {
-        // @ts-ignore
-        const code = jsQR(
-          context.getImageData(0, 0, canvas.width, canvas.height).data,
-          canvas.width,
-          canvas.height
-        );
-        return { code: code.data, data: canvas.toDataURL() };
+  return await page
+    .evaluate(() => {
+      const canvas = document.querySelector('canvas') || null;
+      if (canvas !== null) {
+        const context = canvas.getContext('2d') || null;
+        if (context !== null) {
+          // @ts-ignore
+          const code = jsQR(
+            context.getImageData(0, 0, canvas.width, canvas.height).data,
+            canvas.width,
+            canvas.height
+          );
+          return { urlCode: code.data, base64Image: canvas.toDataURL() };
+        }
       }
-    } else {
-      return { code: null, data: null };
-    }
-  });
+      return undefined;
+    })
+    .catch(() => undefined);
 }
 
 export function SessionTokenCkeck(token: object) {
@@ -166,19 +201,9 @@ export async function auth_InjectToken(
   page: puppeteer.Page,
   session: string,
   options: CreateConfig,
-  token: object
+  token?: tokenSession
 ) {
-  let jsonToken: any;
-  if (typeof token === 'object') {
-    jsonToken = token;
-    return await page.evaluateOnNewDocument((session) => {
-      localStorage.clear();
-      Object.keys(session).forEach((key) => {
-        localStorage.setItem(key, session[key]);
-      });
-    }, jsonToken);
-  } else {
-    //Auth with token ->start<-
+  if (!token) {
     const pathToken: string = path.join(
       path.resolve(
         process.cwd() + options.mkdirFolderToken,
@@ -186,19 +211,69 @@ export async function auth_InjectToken(
       ),
       `${session}.data.json`
     );
-
     if (existsSync(pathToken)) {
-      jsonToken = JSON.parse(readFileSync(pathToken).toString());
-      if (!jsonToken) {
-        return false;
-      } else {
-        return await page.evaluateOnNewDocument((session) => {
-          localStorage.clear();
-          Object.keys(session).forEach((key) => {
-            localStorage.setItem(key, session[key]);
-          });
-        }, jsonToken);
-      }
+      token = JSON.parse(readFileSync(pathToken).toString());
     }
-  } //End Auth with token
+  }
+
+  if (!token || !SessionTokenCkeck(token)) {
+    return false;
+  }
+
+  //Auth with token ->start<-
+  return await page.evaluateOnNewDocument((session) => {
+    localStorage.clear();
+    Object.keys(session).forEach((key) => {
+      localStorage.setItem(key, session[key]);
+    });
+  }, token as any);
+  //End Auth with token
+}
+
+export async function saveToken(
+  page: puppeteer.Page,
+  session: string,
+  options: CreateConfig
+) {
+  const token = (await page
+    .evaluate(() => {
+      if (window.localStorage) {
+        return {
+          WABrowserId: window.localStorage.getItem('WABrowserId'),
+          WASecretBundle: window.localStorage.getItem('WASecretBundle'),
+          WAToken1: window.localStorage.getItem('WAToken1'),
+          WAToken2: window.localStorage.getItem('WAToken2'),
+        };
+      }
+      return undefined;
+    })
+    .catch(() => undefined)) as tokenSession;
+
+  if (!token || !SessionTokenCkeck(token)) {
+    return false;
+  }
+
+  const folder = path.join(
+    path.resolve(
+      process.cwd() + options.mkdirFolderToken,
+      options.folderNameToken
+    )
+  );
+
+  try {
+    fs.mkdirSync(folder, { recursive: true });
+  } catch (error) {
+    throw 'Failed to create folder tokens...';
+  }
+
+  try {
+    fs.writeFileSync(
+      path.join(folder, `${session}.data.json`),
+      JSON.stringify(token)
+    );
+  } catch (error) {
+    throw 'Failed to save token...';
+  }
+
+  return token;
 }
